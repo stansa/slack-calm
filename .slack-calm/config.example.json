@@ -1,0 +1,28 @@
+{
+  "vip_channels": ["#eng-alerts", "#incidents"],
+  "priority_channels": ["#team-backend", "#team-frontend"],
+  "priority_people": ["U0123ABC", "U0456DEF"],
+  "noise_filters": {
+    "bot_ids": ["B0123BOT", "B0456BOT"],
+    "keywords": ["deployed", "merged", "CI passed"],
+    "min_age_days_to_flag_dead": 30
+  },
+  "taxonomy": {
+    "reply_needed": "DMs with asks, @mentions with questions, threads you own, escalations, messages from priority people",
+    "review": "FYI mentions, shared docs, announcements, deploy noise that needs eyes not a keyboard",
+    "noise": "Social chatter and bot spam — summarized as counts by channel, not listed individually"
+  },
+  "scoring": {
+    "deadline_weight": 0.30,
+    "stakeholder_weight": 0.25,
+    "urgency_keyword_weight": 0.20,
+    "escalation_weight": 0.15,
+    "aging_boost_per_4h": 0.05,
+    "low_confidence_threshold": 0.6
+  },
+  "dashboard": {
+    "style": "clean",
+    "max_items_per_tier": 15,
+    "show_noise_as_counts": true
+  }
+}
