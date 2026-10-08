@@ -26,8 +26,19 @@ Slack was supposed to organize work. With hundreds of channels, it became the nu
 2. Copy `.env.example` to `.env` and add your Slack token (read-only scopes: `channels:read`, `groups:read`, `im:read`, `mpim:read`, `users:read`, `search:read`).
 3. Run the setup skill in Claude Code: it scans your channels and proposes a config.
 4. Review and edit `.slack-calm/config.json`.
-5. Run the dashboard skill (or schedule it with `/loop 1h` or cron) to generate `dashboard.html`.
+5. Run the dashboard skill to generate `dashboard.html`.
 6. Open `dashboard.html` in a browser. That's your calm view.
+
+## Automation: your choice, not ours
+
+This repo ships **no automation**. The dashboard skill is a manual command — you run it when you want a fresh view, and that's the default. Automation is documented here as an option so each person or team can pick the level that fits, without the project imposing one.
+
+- **Manual (default):** run the dashboard skill whenever you want a calm view. Zero background processes, zero surprise token spend.
+- **While a session is open:** Claude Code's `/loop 1h rebuild my slack dashboard` regenerates the file hourly during that session. Dies when you close the terminal — which is fine if you like that.
+- **Persistent, local:** a plain cron job or systemd timer calling `claude -p` with the dashboard skill's prompt. Survives restarts; you own the schedule.
+- **Persistent, cloud:** GitHub Actions on a schedule, or any CI that can run `claude -p`. Useful if you want the dashboard always fresh without a laptop running.
+
+The repo includes none of these — no workflow files, no cron examples, no timers. If you want one, copy the pattern from any of the above; the skill prompt is the same regardless of how it's triggered. The design principle: the expensive part (LLM deep-reads) only fires on the delta since the last checkpoint, so even an hourly loop on a hundred quiet channels costs almost nothing.
 
 ## Repo structure
 
@@ -61,6 +72,7 @@ src/
 2. **Team template** — one shared skill, per-person config. Deploy across a team without per-user token burn.
 3. **Visible uncertainty** — low-confidence classifications are flagged, not guessed.
 4. **Aging** — stale items get promoted, not buried.
+5. **No imposed automation** — the project stays a tool you run, not a daemon that runs you.
 
 ## Token budget
 
