@@ -40,6 +40,44 @@ This repo ships **no automation**. The dashboard skill is a manual command — y
 
 The repo includes none of these — no workflow files, no cron examples, no timers. If you want one, copy the pattern from any of the above; the skill prompt is the same regardless of how it's triggered. The design principle: the expensive part (LLM deep-reads) only fires on the delta since the last checkpoint, so even an hourly loop on a hundred quiet channels costs almost nothing.
 
+## Token economy
+
+Token usage is the main cost of running this across a team, so the design treats it as a first-class constraint, not an afterthought.
+
+**How it's designed for minimal usage:**
+
+- **Deterministic code does the heavy lifting.** `fetch.py` pulls all channel metadata and the message delta through the Slack API directly — no LLM involved. `score.py` applies all prioritization with plain Python rules. The LLM only fires for subjective extraction and summarization on the delta.
+- **Checkpoint file.** `.slack-calm/checkpoint.json` stores the last-seen timestamp per channel. Each run reads only what's newer, so a hundred quiet channels cost almost nothing.
+- **Noise filtered before any LLM call.** Bot IDs, automated keywords, and dead channels are stripped by `fetch.py` using the config's noise filters. The model never sees spam.
+- **Batched LLM calls.** Changed channels are grouped ten per call with one structured prompt, instead of one call per channel.
+- **Cached instructions.** The system prompt and config file are identical across runs, so prompt caching (available in Claude Code) avoids re-sending them every time.
+- **Hard caps.** `MAX_DEEP_READS` (default 10) and `LOOKBACK_HOURS` (default 24) bound the worst case per run.
+- **No-op on no changes.** If the delta is empty, the skill exits without regenerating anything.
+
+**What not to do — common ways to burn tokens:**
+
+- **Don't deep-read every channel every run.** This is the single biggest mistake. Without the checkpoint, you're re-processing the same messages hourly and paying for it every time.
+- **Don't send full message history to the model.** Truncate to the last few messages per channel. Old context adds cost without adding signal.
+- **Don't use free-text labels or open-ended prompts.** "Summarize whatever you find" invites the model to ramble. The fixed taxonomy (reply needed / review / noise) with a structured output schema keeps responses short and predictable.
+- **Don't run the LLM on noise.** If a channel is pure bot spam, count it — don't classify it.
+- **Don't regenerate the dashboard when nothing changed.** A no-op run should cost near zero.
+- **Don't put the config or skill instructions inside the per-item prompt.** They belong in the cached system prompt, sent once per session.
+- **Don't schedule more aggressively than you need.** An hourly loop on a busy workspace is fine; a five-minute loop is paying for freshness nobody uses.
+
+**Which model to use:**
+
+| Task | Recommended model | Why |
+| --- | --- | --- |
+| Dashboard extraction & classification | **Sonnet** | The core job — one-line summaries, tier assignment, confidence scores on batched channels. Sonnet is the sweet spot: accurate enough for structured extraction, a fraction of Opus's cost. |
+| Setup skill (one-time scan) | **Sonnet** | Runs once per user. Accuracy matters for the proposed tiering, but it's not a recurring cost. |
+| Scoring & rendering | **No model** | `score.py` and `render.py` are pure Python. Never route these through an LLM. |
+
+**Haiku** is tempting for cost, but it's the wrong tool here: classification with a confidence threshold needs reliable judgment, and a misfiled escalation is worse than a slightly higher per-call price. Reserve Haiku only if you later add a cheap pre-filter pass that the Sonnet pass double-checks.
+
+**Opus** is overkill for this workload. It's built for deep reasoning and long agentic tasks — writing code, multi-step analysis. Summarizing a Slack message into one line doesn't need it, and at team scale the price difference compounds fast.
+
+Practical guidance: start with Sonnet for everything, measure your actual token usage over a week, and only consider model changes if the numbers surprise you. The architecture — deterministic code plus a thin LLM layer — means swapping models is a one-line config change, not a rewrite.
+
 ## Repo structure
 
 ```
@@ -73,10 +111,7 @@ src/
 3. **Visible uncertainty** — low-confidence classifications are flagged, not guessed.
 4. **Aging** — stale items get promoted, not buried.
 5. **No imposed automation** — the project stays a tool you run, not a daemon that runs you.
-
-## Token budget
-
-Designed so a hundred channels with nothing new costs almost nothing. The expensive LLM pass only fires on the delta, batched ten channels per call, with cached system prompts.
+6. **Token-conscious by design** — deterministic code for the heavy lifting, with explicit anti-patterns so adopters don't accidentally burn budget.
 
 ## License
 
